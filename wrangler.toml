@@ -1,0 +1,55 @@
+name = "maermin-skinport-proxy"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Deploy: the "Deploy to Cloudflare" button in the README, or `npx wrangler deploy`
+# in this folder (wrangler 4.45 or later).
+
+# E2E cloud sync (Epic 1) stores only ciphertext. No id: Cloudflare creates the
+# KV namespace on the first deploy and keeps it bound on later deploys.
+[[kv_namespaces]]
+binding = "SYNC"
+
+# Recommended: atomic sync. One Durable Object per account serialises the
+# revision check, so two devices syncing at once can't silently overwrite each
+# other (KV has no compare-and-set). Existing KV records are adopted on first
+# use. SQLite-backed Durable Objects are available on the free plan.
+[[durable_objects.bindings]]
+name = "SYNC_DO"
+class_name = "SyncRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SyncRoom"]
+
+# P5-5.1 Web push: deliver due reminders (and the opt-in price rules) every
+# 15 minutes. Uses the SYNC KV namespace; the messages are encrypted in the
+# browser, this Worker only relays ciphertext.
+[triggers]
+crons = ["*/15 * * * *"]
+
+# CORS: exact origins allowed to read responses (the official app and
+# localhost are built in). Add your own domain(s), comma separated.
+# "null" is the origin of index.html opened from disk; set ALLOW_NULL_ORIGIN
+# and ALLOW_LOCALHOST to "false" if you only use the hosted app.
+[vars]
+# ALLOWED_ORIGINS = "https://portfolio.example.com"
+ALLOW_NULL_ORIGIN = "true"
+# P5-5.1 Web push: the VAPID "sub" claim (a mailto: or https: URL); default the repo URL.
+# VAPID_SUBJECT = "mailto:you@example.com"
+# Optional: a free CoinGecko demo key raises the crypto price limit:
+#   npx wrangler secret put COINGECKO_API_KEY
+# Share snapshots per UTC day (each costs one KV write). Default 300.
+# SHARE_DAILY_MAX = "300"
+# New sync accounts per UTC day (each client at most 5). Default 200.
+# SYNC_DAILY_NEW_MAX = "200"
+# ALLOW_LOCALHOST = "true"
+# P5-3.1 shared price Worker only (see docs/WORKER.md): market data only,
+# refuses sync / share / MCP / broker relay / Steam inventory.
+# PRICE_ONLY = "1"
+# PRICE_ONLY_RPM = "60"
+# PRICE_ONLY_OFF = "1"   # kill switch
+# P5-3.4 bank sync over FinTS (see docs/WORKER.md)
+# FINTS_PRODUCT_ID = ""       # the MAERMIN FinTS product id; never commit a real one here
+# FINTS_PRODUCT_VERSION = "1"
+# FINTS_EXTRA_HOSTS = ""      # extra bank hosts, comma-separated
